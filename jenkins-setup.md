@@ -134,6 +134,7 @@ secret_key = ""
 
 ```
 ###  Install Jenkins on the instance
+
 ```
 
 sudo su -
@@ -149,6 +150,7 @@ source ~/.bash_profile
 java -version
 sudo systemctl start jenkins
 sudo systemctl status jenkins
+
 ```
 
 
