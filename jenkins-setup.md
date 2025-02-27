@@ -147,6 +147,7 @@ sudo rpm --import https://pkg.jenkins.io/redhat-stable/jenkins.io-2023.key
 sudo amazon-linux-extras enable java-openjdk17
 sudo yum install java-17-amazon-corretto-devel
 sudo amazon-linux-extras enable java-openjdk17
+sudo yum install java-17-amazon-corretto-devel
 sudo yum upgrade -y
 sudo yum install jenkins -y
 export JAVA_HOME=/usr/lib/jvm/java-17-amazon-corretto.x86_64
