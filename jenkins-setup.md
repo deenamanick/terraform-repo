@@ -92,6 +92,7 @@ resource "aws_instance" "ec2instance" {
 #   availability_zone = "us-east-1b"
 # }
 ```
+
 ## provider.tf
 ```
 # CONFIGURATION AND PARAMETERS
@@ -109,6 +110,8 @@ terraform {
     }
   }
 }
+
+```
 ## variable.tf
 ```
 variable "access_key" {
