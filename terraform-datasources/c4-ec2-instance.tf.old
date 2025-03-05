@@ -1,0 +1,50 @@
+# Create EC2 Instance - Amazon Linux
+# resource "aws_instance" "my-ec2-vm" {
+#   ami           = data.aws_ami.amzlinux.id
+#   for_each      = { for idx, instance in var.ec2_instance_type : idx => instance }
+#   instance_type = each.value.type
+#   # key_name      = "terraform-key"
+#   key_name = aws_key_pair.my-key.key_name # Use the created key pair
+#   # vpc_security_group_ids = [aws_security_group.web-server-02.id] # Fix: Use id instead of name
+#   user_data              = file("ansible-install.sh")
+#   vpc_security_group_ids = [aws_security_group.vpc-ssh.id, aws_security_group.vpc-web.id]
+#   tags = {
+#     Name = each.key # Assigning instance name dynamically
+#   }
+# }
+
+# Create EC2 Instances
+resource "aws_instance" "my-ec2-vm" {
+  ami                    = data.aws_ami.amzlinux.id
+  instance_type          = each.value.type
+  key_name               = aws_key_pair.my-key.key_name
+  vpc_security_group_ids = [aws_security_group.vpc-ssh.id, aws_security_group.vpc-web.id]
+  user_data              = each.value.role == "master" ? file("master-user-data.sh.tpl") : file("worker-user-data.sh")
+  # User data script based on role
+  #user_data = each.value.role == "master" ? templatefile("master-user-data.sh.tpl", {
+  # worker_ips = join(" ", local.worker_private_ips)
+  #}) : file("worker-user-data.sh")
+  tags = {
+    Name = "${each.value.role}-${each.key}"
+  }
+
+  for_each = { for idx, instance in var.ec2_instance_type : idx => instance }
+
+}
+
+
+############ Creating Key pair for EC2 ############
+resource "tls_private_key" "example" {
+  algorithm = "RSA"
+  rsa_bits  = 4096
+}
+
+resource "aws_key_pair" "my-key" {
+  key_name   = "testkey"
+  public_key = tls_private_key.example.public_key_openssh
+}
+
+# Fetch private IPs of workers
+locals {
+  worker_private_ips = [for instance in aws_instance.my-ec2-vm : instance.private_ip if instance.tags["Name"] != "master"]
+}
