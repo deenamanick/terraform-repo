@@ -1,0 +1,1 @@
+Ec2 creation is done using readily terraform module terraform-aws-modules/ec2-instance/awscd 
