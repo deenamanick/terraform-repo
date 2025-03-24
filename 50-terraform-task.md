@@ -1,4 +1,4 @@
-## ** Make sure to create the following directory structure, and create the terraform.tvfvars with access key and secret key **
+## Make sure to create the following directory structure, and create the terraform.tvfvars with access key and secret key
 
 ```
 mkdir project-folder
@@ -332,6 +332,52 @@ secret_key = ""
 - **Recommendation**: Use Terraform to manage serverless architectures.
 
 ---
+### Install Terraform and verify version
+
+```
+terraform -v
+
+```
+### Define a local variable
+
+```
+Create a configuration that defines a local variable and outputs its value.
+
+```
+locals {
+  environment = "development"
+}
+
+output "environment" {
+  value = local.environment
+}
+
+```
+###  Use input variables
+
+```
+variable "environment" {
+  description = "Deployment environment"
+  type        = string
+  default     = "dev"
+}
+
+variable "region" {
+  description = "AWS region"
+  type        = string
+  default     = "us-west-2"
+}
+
+provider "aws" {
+  region = var.region
+}
+
+output "environment_info" {
+  value = "Running in ${var.environment} environment in ${var.region} region"
+}
+```
+
+
 
 
 ---
