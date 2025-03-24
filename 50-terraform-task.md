@@ -300,21 +300,6 @@ secret_key = ""
 
 ---
 
-### 17. **Use Terraform Cloud**
-- **Description**: Integrate Terraform with Terraform Cloud.
-- **Code**:
-  ```hcl
-  terraform {
-    cloud {
-      organization = "my-org"
-      workspaces {
-        name = "my-workspace"
-      }
-    }
-  }
-  ```
-- **Recommendation**: Use Terraform Cloud for collaboration.
-
 ---
 
 ### 18. **Create a Lambda Function**
@@ -332,15 +317,14 @@ secret_key = ""
 - **Recommendation**: Use Terraform to manage serverless architectures.
 
 ---
-### Install Terraform and verify version
+### 19. Install Terraform and verify version
 
 ```
 terraform -v
 
 ```
-### Define a local variable
+### 20. Define a local variable
 
-```
 Create a configuration that defines a local variable and outputs its value.
 
 ```
@@ -353,7 +337,7 @@ output "environment" {
 }
 
 ```
-###  Use input variables
+### 21. Use input variables
 
 ```
 variable "environment" {
@@ -375,15 +359,192 @@ provider "aws" {
 output "environment_info" {
   value = "Running in ${var.environment} environment in ${var.region} region"
 }
+
+```
+### 22. Use resource references
+
+Create an EC2 instance that references the security group created in the previous task.
+
+```
+provider "aws" {
+  region = "us-west-2"
+}
+
+resource "aws_security_group" "web_sg" {
+  name        = "web-server-sg"
+  description = "Allow HTTP and SSH traffic"
+  
+  ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+  
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+  
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+resource "aws_instance" "web_server" {
+  ami             = "ami-0c55b159cbfafe1f0"
+  instance_type   = "t2.micro"
+  security_groups = [aws_security_group.web_sg.name]
+  
+  tags = {
+    Name = "WebServer"
+  }
+}
+
+```
+### 23. Create a VPC with public and private subnets
+
+```
+provider "aws" {
+  region = "us-west-2"
+}
+
+resource "aws_vpc" "main" {
+  cidr_block = "10.0.0.0/16"
+  
+  tags = {
+    Name = "MainVPC"
+  }
+}
+
+resource "aws_subnet" "public" {
+  vpc_id            = aws_vpc.main.id
+  cidr_block        = "10.0.1.0/24"
+  availability_zone = "us-west-2a"
+  map_public_ip_on_launch = true
+  
+  tags = {
+    Name = "PublicSubnet"
+  }
+}
+
+resource "aws_subnet" "private" {
+  vpc_id            = aws_vpc.main.id
+  cidr_block        = "10.0.2.0/24"
+  availability_zone = "us-west-2b"
+  
+  tags = {
+    Name = "PrivateSubnet"
+  }
+}
+
+resource "aws_internet_gateway" "igw" {
+  vpc_id = aws_vpc.main.id
+  
+  tags = {
+    Name = "MainIGW"
+  }
+}
+
+resource "aws_route_table" "public" {
+  vpc_id = aws_vpc.main.id
+  
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.igw.id
+  }
+  
+  tags = {
+    Name = "PublicRouteTable"
+  }
+}
+
+resource "aws_route_table_association" "public" {
+  subnet_id      = aws_subnet.public.id
+  route_table_id = aws_route_table.public.id
+}
+
+```
+### 24. Use for_each to create multiple resources with specific names
+
+```
+provider "aws" {
+  region = "us-west-2"
+}
+
+locals {
+  instances = {
+    web    = "t2.micro"
+    app    = "t2.small"
+    db     = "t2.medium"
+  }
+}
+
+resource "aws_instance" "servers" {
+  for_each      = local.instances
+  ami           = "ami-0c55b159cbfafe1f0"
+  instance_type = each.value
+  
+  tags = {
+    Name = "${each.key}-server"
+  }
+}
+
+```
+
+### 25. Use dynamic blocks
+
+```
+provider "aws" {
+  region = "us-west-2"
+}
+
+locals {
+  ingress_rules = [
+    {
+      port        = 80
+      description = "HTTP"
+    },
+    {
+      port        = 443
+      description = "HTTPS"
+    },
+    {
+      port        = 22
+      description = "SSH"
+    }
+  ]
+}
+
+resource "aws_security_group" "web" {
+  name        = "web-server-sg"
+  description = "Security group for web servers"
+  
+  dynamic "ingress" {
+    for_each = local.ingress_rules
+    content {
+      from_port   = ingress.value.port
+      to_port     = ingress.value.port
+      protocol    = "tcp"
+      cidr_blocks = ["0.0.0.0/0"]
+      description = ingress.value.description
+    }
+  }
+  
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
 ```
 
 
 
 
----
-
-
-
----
-
-Let me know if you need further clarification or additional examples!
