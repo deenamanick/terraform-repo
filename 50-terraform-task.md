@@ -1170,6 +1170,319 @@ resource "azurerm_linux_virtual_machine" "example" {
 }
 
 ```
+### 33. Deploy an AWS EKS Cluster (Kubernetes)
+
+```
+provider "aws" {
+  region = "us-west-2"
+}
+
+data "aws_availability_zones" "available" {}
+
+resource "aws_vpc" "eks_vpc" {
+  cidr_block = "10.0.0.0/16"
+  
+  tags = {
+    Name = "eks-vpc"
+  }
+}
+
+resource "aws_subnet" "eks_subnet" {
+  count = 2
+  
+  vpc_id            = aws_vpc.eks_vpc.id
+  cidr_block        = "10.0.${count.index}.0/24"
+  availability_zone = data.aws_availability_zones.available.names[count.index]
+  map_public_ip_on_launch = true
+  
+  tags = {
+    Name = "eks-subnet-${count.index}"
+    "kubernetes.io/cluster/my-eks-cluster" = "shared"
+  }
+}
+
+resource "aws_internet_gateway" "eks_igw" {
+  vpc_id = aws_vpc.eks_vpc.id
+  
+  tags = {
+    Name = "eks-igw"
+  }
+}
+
+resource "aws_route_table" "eks_rt" {
+  vpc_id = aws_vpc.eks_vpc.id
+  
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.eks_igw.id
+  }
+  
+  tags = {
+    Name = "eks-rt"
+  }
+}
+
+resource "aws_route_table_association" "eks_rta" {
+  count = 2
+  
+  subnet_id      = aws_subnet.eks_subnet[count.index].id
+  route_table_id = aws_route_table.eks_rt.id
+}
+
+resource "aws_iam_role" "eks_cluster_role" {
+  name = "eks-cluster-role"
+  
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action = "sts:AssumeRole"
+      Effect = "Allow"
+      Principal = {
+        Service = "eks.amazonaws.com"
+      }
+    }]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "eks_cluster_policy" {
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEKSClusterPolicy"
+  role       = aws_iam_role.eks_cluster_role.name
+}
+
+resource "aws_iam_role" "eks_node_role" {
+  name = "eks-node-role"
+  
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action = "sts:AssumeRole"
+      Effect = "Allow"
+      Principal = {
+        Service = "ec2.amazonaws.com"
+      }
+    }]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "eks_worker_node_policy" {
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy"
+  role       = aws_iam_role.eks_node_role.name
+}
+
+resource "aws_iam_role_policy_attachment" "eks_cni_policy" {
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy"
+  role       = aws_iam_role.eks_node_role.name
+}
+
+resource "aws_iam_role_policy_attachment" "ecr_readonly_policy" {
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerR
+
+```
+### 34. Use Terraform for_each to create multiple resources
+
+```
+provider "aws" {
+  region = "us-west-2"
+}
+
+variable "instances" {
+  type = map(object({
+    instance_type = string
+    ami           = string
+    tags          = map(string)
+  }))
+  
+  default = {
+    "web-server" = {
+      instance_type = "t2.micro"
+      ami           = "ami-0c55b159cbfafe1f0"
+      tags          = { Role = "Web" }
+    },
+    "app-server" = {
+      instance_type = "t2.small"
+      ami           = "ami-0c55b159cbfafe1f0"
+      tags          = { Role = "App" }
+    },
+    "db-server" = {
+      instance_type = "t2.medium"
+      ami           = "ami-0c55b159cbfafe1f0"
+      tags          = { Role = "Database" }
+    }
+  }
+}
+
+resource "aws_instance" "servers" {
+  for_each = var.instances
+  
+  ami           = each.value.ami
+  instance_type = each.value.instance_type
+  
+  tags = merge(
+    {
+      Name = each.key
+    },
+    each.value.tags
+  )
+}
+
+output "instance_ips" {
+  value = {
+    for name, instance in aws_instance.servers :
+    name => instance.private_ip
+  }
+}
+
+```
+
+### 35. Use Terraform map variable to store key-value pairs
+
+```
+variable "environment_settings" {
+  type = map(object({
+    instance_type  = string
+    instance_count = number
+    is_public      = bool
+  }))
+  
+  default = {
+    "dev" = {
+      instance_type  = "t2.micro"
+      instance_count = 1
+      is_public      = true
+    },
+    "staging" = {
+      instance_type  = "t2.small"
+      instance_count = 2
+      is_public      = true
+    },
+    "prod" = {
+      instance_type  = "t2.medium"
+      instance_count = 3
+      is_public      = false
+    }
+  }
+}
+
+variable "environment" {
+  type    = string
+  default = "dev"
+}
+
+output "environment_config" {
+  value = "For ${var.environment} environment: ${var.environment_settings[var.environment].instance_count} instances of type ${var.environment_settings[var.environment].instance_type}, public: ${var.environment_settings[var.environment].is_public}"
+}
+
+```
+### 36. Use Terraform depends_on to set dependencies between resources
+
+```
+provider "aws" {
+  region = "us-west-2"
+}
+
+resource "aws_s3_bucket" "log_bucket" {
+  bucket = "my-log-bucket-example"
+}
+
+resource "aws_s3_bucket" "app_bucket" {
+  bucket = "my-app-bucket-example"
+  
+  # This bucket can only be created after the log bucket is created
+  depends_on = [aws_s3_bucket.log_bucket]
+}
+
+resource "aws_s3_bucket_logging" "app_bucket_logging" {
+  bucket = aws_s3_bucket.app_bucket.id
+  
+  target_bucket = aws_s3_bucket.log_bucket.id
+  target_prefix = "app-bucket-logs/"
+  
+  depends_on = [aws_s3_bucket.log_bucket, aws_s3_bucket.app_bucket]
+}
+
+output "buckets" {
+  value = {
+    log_bucket = aws_s3_bucket.log_bucket.bucket,
+    app_bucket = aws_s3_bucket.app_bucket.bucket
+  }
+}
+
+```
+
+### 37. Use Terraform null_resource for custom scripts
+
+```
+
+provider "aws" {
+  region = "us-west-2"
+}
+
+resource "aws_instance" "web_server" {
+  ami           = "ami-0c55b159cbfafe1f0"
+  instance_type = "t2.micro"
+  key_name      = "my-key-pair"
+  
+  tags = {
+    Name = "WebServer"
+  }
+  
+  # Add connection information
+  connection {
+    type        = "ssh"
+    user        = "ec2-user"
+    private_key = file("~/.ssh/my-key-pair.pem")
+    host        = self.public_ip
+  }
+  
+  # Install web server during creation
+  provisioner "remote-exec" {
+    inline = [
+      "sudo yum update -y",
+      "sudo yum install -y httpd",
+      "sudo systemctl start httpd",
+      "sudo systemctl enable httpd"
+    ]
+  }
+}
+
+# null_resource for running scripts after instance creation
+resource "null_resource" "deploy_app" {
+  # Trigger when instance ID changes
+  triggers = {
+    instance_id = aws_instance.web_server.id
+  }
+  
+  connection {
+    type        = "ssh"
+    user        = "ec2-user"
+    private_key = file("~/.ssh/my-key-pair.pem")
+    host        = aws_instance.web_server.public_ip
+  }
+  
+  # Copy application files
+  provisioner "file" {
+    source      = "./app/"
+    destination = "/tmp/app"
+  }
+  
+  # Run deployment script
+  provisioner "remote-exec" {
+    inline = [
+      "sudo cp -r /tmp/app/* /var/www/html/",
+      "sudo chmod 644 /var/www/html/*",
+      "sudo systemctl restart httpd"
+    ]
+  }
+  
+  depends_on = [aws_instance.web_server]
+}
+
+output "website_url" {
+  value = "http://${aws_instance.web_server.public_ip}"
+}
+
+```
+
 
 
 
