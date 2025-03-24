@@ -292,18 +292,71 @@ secret_key = ""
 ---
 
 ### 18. **Create a Lambda Function**
-- **Description**: Deploy an AWS Lambda function.
-- **Code**:
-  ```hcl
-  resource "aws_lambda_function" "example" {
-    function_name = "example-lambda"
-    handler       = "index.handler"
-    runtime       = "nodejs14.x"
-    role          = aws_iam_role.example.arn
-    filename      = "lambda.zip"
+```
+provider "aws" {
+  region = "us-west-2"
+}
+
+# Create IAM role for Lambda
+resource "aws_iam_role" "lambda_role" {
+  name = "lambda_execution_role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action = "sts:AssumeRole"
+      Effect = "Allow"
+      Principal = {
+        Service = "lambda.amazonaws.com"
+      }
+    }]
+  })
+}
+
+# Attach basic Lambda execution policy
+resource "aws_iam_role_policy_attachment" "lambda_policy" {
+  role       = aws_iam_role.lambda_role.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+# Create zip file for Lambda function code
+data "archive_file" "lambda_zip" {
+  type        = "zip"
+  output_path = "${path.module}/lambda_function.zip"
+  
+  source {
+    content  = <<EOF
+exports.handler = async (event) => {
+  return {
+    statusCode: 200,
+    body: JSON.stringify('Hello from Lambda!'),
+  };
+};
+EOF
+    filename = "index.js"
   }
-  ```
-- **Recommendation**: Use Terraform to manage serverless architectures.
+}
+
+# Create Lambda function
+resource "aws_lambda_function" "hello_lambda" {
+  function_name    = "hello-lambda"
+  role             = aws_iam_role.lambda_role.arn
+  handler          = "index.handler"
+  runtime          = "nodejs18.x"
+  filename         = data.archive_file.lambda_zip.output_path
+  source_code_hash = data.archive_file.lambda_zip.output_base64sha256
+  
+  timeout     = 10
+  memory_size = 128
+  
+  environment {
+    variables = {
+      ENVIRONMENT = "dev"
+    }
+  }
+}
+
+```
 
 ---
 ### 19. Install Terraform and verify version
@@ -925,7 +978,198 @@ resource "aws_cloudwatch_metric_alarm" "low_cpu" {
   alarm_actions     = [aws_autoscaling_policy.scale_down.arn]
 }
 ```
+### 29. Use Terraform workspaces for multiple environments
 
+```
+provider "aws" {
+  region = "us-west-2"
+}
+
+locals {
+  environment_config = {
+    default = {
+      instance_type = "t2.micro"
+      instance_count = 1
+    }
+    dev = {
+      instance_type = "t2.micro"
+      instance_count = 1
+    }
+    staging = {
+      instance_type = "t2.medium"
+      instance_count = 2
+    }
+    prod = {
+      instance_type = "t2.large"
+      instance_count = 3
+    }
+  }
+
+  # Use either the workspace config or default if workspace config doesn't exist
+  config = lookup(local.environment_config, terraform.workspace, local.environment_config["default"])
+}
+
+resource "aws_instance" "app_server" {
+  count         = local.config.instance_count
+  ami           = "ami-0c55b159cbfafe1f0"
+  instance_type = local.config.instance_type
+  
+  tags = {
+    Name        = "AppServer-${terraform.workspace}-${count.index + 1}"
+    Environment = terraform.workspace
+  }
+}
+
+# Command to use workspaces:
+# terraform workspace new dev
+# terraform workspace new staging
+# terraform workspace new prod
+# terraform workspace select dev
+
+```
+### 30.  Create an AWS DynamoDB table
+
+```
+provider "aws" {
+  region = "us-west-2"
+}
+
+resource "aws_dynamodb_table" "basic_table" {
+  name           = "Users"
+  billing_mode   = "PAY_PER_REQUEST"
+  hash_key       = "UserId"
+  range_key      = "CreatedAt"
+
+  attribute {
+    name = "UserId"
+    type = "S"
+  }
+
+  attribute {
+    name = "CreatedAt"
+    type = "S"
+  }
+
+  attribute {
+    name = "Email"
+    type = "S"
+  }
+
+  global_secondary_index {
+    name               = "EmailIndex"
+    hash_key           = "Email"
+    projection_type    = "ALL"
+  }
+
+  tags = {
+    Name        = "user-table"
+    Environment = "dev"
+  }
+
+  point_in_time_recovery {
+    enabled = true
+  }
+}
+
+```
+
+### 31. Use Terraform provisioners to execute local commands
+
+
+```
+provider "aws" {
+  region = "us-west-2"
+}
+
+resource "aws_instance" "web_server" {
+  ami           = "ami-0c55b159cbfafe1f0"
+  instance_type = "t2.micro"
+  key_name      = "my-key-pair"
+  
+  tags = {
+    Name = "WebServer"
+  }
+
+  # Local-exec provisioner runs on the machine executing Terraform
+  provisioner "local-exec" {
+    command = "echo Instance ${self.id} created with IP ${self.private_ip} > instance_info.txt"
+  }
+
+  # This will run when the resource is destroyed
+  provisioner "local-exec" {
+    when    = destroy
+    command = "echo 'Instance ${self.id} has been destroyed' >> destruction_log.txt"
+  }
+}
+
+```
+### 32. Create an Azure Virtual Machine with Terraform
+
+```
+provider "azurerm" {
+  features {}
+}
+
+resource "azurerm_resource_group" "example" {
+  name     = "example-resources"
+  location = "East US"
+}
+
+resource "azurerm_virtual_network" "example" {
+  name                = "example-network"
+  address_space       = ["10.0.0.0/16"]
+  location            = azurerm_resource_group.example.location
+  resource_group_name = azurerm_resource_group.example.name
+}
+
+resource "azurerm_subnet" "example" {
+  name                 = "internal"
+  resource_group_name  = azurerm_resource_group.example.name
+  virtual_network_name = azurerm_virtual_network.example.name
+  address_prefixes     = ["10.0.2.0/24"]
+}
+
+resource "azurerm_network_interface" "example" {
+  name                = "example-nic"
+  location            = azurerm_resource_group.example.location
+  resource_group_name = azurerm_resource_group.example.name
+
+  ip_configuration {
+    name                          = "internal"
+    subnet_id                     = azurerm_subnet.example.id
+    private_ip_address_allocation = "Dynamic"
+  }
+}
+
+resource "azurerm_linux_virtual_machine" "example" {
+  name                = "example-machine"
+  resource_group_name = azurerm_resource_group.example.name
+  location            = azurerm_resource_group.example.location
+  size                = "Standard_B1s"
+  admin_username      = "adminuser"
+  network_interface_ids = [
+    azurerm_network_interface.example.id,
+  ]
+
+  admin_ssh_key {
+    username   = "adminuser"
+    public_key = file("~/.ssh/id_rsa.pub")
+  }
+
+  os_disk {
+    caching              = "ReadWrite"
+    storage_account_type = "Standard_LRS"
+  }
+
+  source_image_reference {
+    publisher = "Canonical"
+    offer     = "UbuntuServer"
+    sku       = "18.04-LTS"
+    version   = "latest"
+  }
+}
+
+```
 
 
 
