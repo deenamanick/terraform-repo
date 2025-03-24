@@ -209,17 +209,6 @@ secret_key = ""
 
 ---
 
-### 12. **Use Terraform Workspaces**
-- **Description**: Manage multiple environments using workspaces.
-- **Code**:
-  ```hcl
-  resource "aws_instance" "example" {
-    ami           = "ami-0c02fb55956c7d316"
-    instance_type = terraform.workspace == "prod" ? "t2.large" : "t2.micro"
-  }
-  ```
-- **Recommendation**: Use workspaces for staging and production environments.
-
 ---
 
 ### 13. **Use Dynamic Blocks**
@@ -544,6 +533,401 @@ resource "aws_security_group" "web" {
   }
 }
 ```
+### 26. Deploy an AWS RDS MySQL database
+
+```
+provider "aws" {
+  region = "us-west-2"
+}
+
+resource "aws_security_group" "db_sg" {
+  name        = "mysql-sg"
+  description = "Allow MySQL inbound traffic"
+  
+  ingress {
+    from_port   = 3306
+    to_port     = 3306
+    protocol    = "tcp"
+    cidr_blocks = ["10.0.0.0/16"]
+  }
+  
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+resource "aws_db_instance" "mysql" {
+  allocated_storage    = 20
+  storage_type         = "gp2"
+  engine               = "mysql"
+  engine_version       = "8.0"
+  instance_class       = "db.t3.micro"
+  db_name              = "mydb"
+  username             = "admin"
+  password             = "change-me-please"  # Use secrets manager in production
+  parameter_group_name = "default.mysql8.0"
+  skip_final_snapshot  = true
+  vpc_security_group_ids = [aws_security_group.db_sg.id]
+  
+  tags = {
+    Name = "MySQL-DB"
+  }
+}
+
+output "db_endpoint" {
+  value = aws_db_instance.mysql.endpoint
+}
+```
+### 27. Deploy an AWS ALB (Load Balancer)
+
+```
+provider "aws" {
+  region = "us-west-2"
+}
+
+resource "aws_vpc" "main" {
+  cidr_block = "10.0.0.0/16"
+  
+  tags = {
+    Name = "MainVPC"
+  }
+}
+
+resource "aws_subnet" "public1" {
+  vpc_id            = aws_vpc.main.id
+  cidr_block        = "10.0.1.0/24"
+  availability_zone = "us-west-2a"
+  map_public_ip_on_launch = true
+  
+  tags = {
+    Name = "Public-1"
+  }
+}
+
+resource "aws_subnet" "public2" {
+  vpc_id            = aws_vpc.main.id
+  cidr_block        = "10.0.2.0/24"
+  availability_zone = "us-west-2b"
+  map_public_ip_on_launch = true
+  
+  tags = {
+    Name = "Public-2"
+  }
+}
+
+resource "aws_internet_gateway" "igw" {
+  vpc_id = aws_vpc.main.id
+  
+  tags = {
+    Name = "MainIGW"
+  }
+}
+
+resource "aws_route_table" "public" {
+  vpc_id = aws_vpc.main.id
+  
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.igw.id
+  }
+  
+  tags = {
+    Name = "PublicRouteTable"
+  }
+}
+
+resource "aws_route_table_association" "public1" {
+  subnet_id      = aws_subnet.public1.id
+  route_table_id = aws_route_table.public.id
+}
+
+resource "aws_route_table_association" "public2" {
+  subnet_id      = aws_subnet.public2.id
+  route_table_id = aws_route_table.public.id
+}
+
+resource "aws_security_group" "alb_sg" {
+  name        = "alb-sg"
+  description = "Security group for ALB"
+  vpc_id      = aws_vpc.main.id
+  
+  ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+  
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+resource "aws_security_group" "instance_sg" {
+  name        = "instance-sg"
+  description = "Security group for EC2 instances"
+  vpc_id      = aws_vpc.main.id
+  
+  ingress {
+    from_port       = 80
+    to_port         = 80
+    protocol        = "tcp"
+    security_groups = [aws_security_group.alb_sg.id]
+  }
+  
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+resource "aws_lb" "web_alb" {
+  name               = "web-alb"
+  internal           = false
+  load_balancer_type = "application"
+  security_groups    = [aws_security_group.alb_sg.id]
+  subnets            = [aws_subnet.public1.id, aws_subnet.public2.id]
+  
+  tags = {
+    Name = "WebALB"
+  }
+}
+
+resource "aws_lb_target_group" "web_tg" {
+  name     = "web-target-group"
+  port     = 80
+  protocol = "HTTP"
+  vpc_id   = aws_vpc.main.id
+  
+  health_check {
+    path                = "/"
+    port                = "traffic-port"
+    healthy_threshold   = 3
+    unhealthy_threshold = 3
+    timeout             = 5
+    interval            = 30
+  }
+}
+
+resource "aws_lb_listener" "front_end" {
+  load_balancer_arn = aws_lb.web_alb.arn
+  port              = 80
+  protocol          = "HTTP"
+  
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.web_tg.arn
+  }
+}
+
+resource "aws_instance" "web" {
+  count                  = 2
+  ami                    = "ami-0c55b159cbfafe1f0"
+  instance_type          = "t2.micro"
+  subnet_id              = count.index % 2 == 0 ? aws_subnet.public1.id : aws_subnet.public2.id
+  vpc_security_group_ids = [aws_security_group.instance_sg.id]
+  user_data              = <<-EOF
+                            #!/bin/bash
+                            yum update -y
+                            yum install -y httpd
+                            echo "Hello from instance ${count.index}" > /var/www/html/index.html
+                            systemctl start httpd
+                            systemctl enable httpd
+                            EOF
+  
+  tags = {
+    Name = "WebServer-${count.index + 1}"
+  }
+}
+
+resource "aws_lb_target_group_attachment" "web" {
+  count            = 2
+  target_group_arn = aws_lb_target_group.web_tg.arn
+  target_id        = aws_instance.web[count.index].id
+  port             = 80
+}
+
+output "alb_dns_name" {
+  value = aws_lb.web_alb.dns_name
+}
+
+```
+
+### 28  Deploy an AWS Auto Scaling Group
+
+```
+provider "aws" {
+  region = "us-west-2"
+}
+
+resource "aws_vpc" "main" {
+  cidr_block = "10.0.0.0/16"
+}
+
+resource "aws_subnet" "public1" {
+  vpc_id            = aws_vpc.main.id
+  cidr_block        = "10.0.1.0/24"
+  availability_zone = "us-west-2a"
+  map_public_ip_on_launch = true
+}
+
+resource "aws_subnet" "public2" {
+  vpc_id            = aws_vpc.main.id
+  cidr_block        = "10.0.2.0/24"
+  availability_zone = "us-west-2b"
+  map_public_ip_on_launch = true
+}
+
+resource "aws_internet_gateway" "igw" {
+  vpc_id = aws_vpc.main.id
+}
+
+resource "aws_route_table" "public" {
+  vpc_id = aws_vpc.main.id
+  
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.igw.id
+  }
+}
+
+resource "aws_route_table_association" "public1" {
+  subnet_id      = aws_subnet.public1.id
+  route_table_id = aws_route_table.public.id
+}
+
+resource "aws_route_table_association" "public2" {
+  subnet_id      = aws_subnet.public2.id
+  route_table_id = aws_route_table.public.id
+}
+
+resource "aws_security_group" "web_sg" {
+  name        = "web-server-sg"
+  description = "Allow HTTP traffic"
+  vpc_id      = aws_vpc.main.id
+  
+  ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+  
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+resource "aws_launch_template" "web" {
+  name_prefix   = "web-"
+  image_id      = "ami-0c55b159cbfafe1f0"
+  instance_type = "t2.micro"
+  
+  vpc_security_group_ids = [aws_security_group.web_sg.id]
+  
+  user_data = base64encode(<<-EOF
+              #!/bin/bash
+              yum update -y
+              yum install -y httpd
+              echo "Hello from Auto Scaling Group" > /var/www/html/index.html
+              systemctl start httpd
+              systemctl enable httpd
+              EOF
+  )
+  
+  tag_specifications {
+    resource_type = "instance"
+    
+    tags = {
+      Name = "WebServer-ASG"
+    }
+  }
+}
+
+resource "aws_autoscaling_group" "web" {
+  desired_capacity    = 2
+  max_size            = 5
+  min_size            = 1
+  vpc_zone_identifier = [aws_subnet.public1.id, aws_subnet.public2.id]
+  
+  launch_template {
+    id      = aws_launch_template.web.id
+    version = "$Latest"
+  }
+  
+  tag {
+    key                 = "Name"
+    value               = "WebASG"
+    propagate_at_launch = true
+  }
+}
+
+resource "aws_autoscaling_policy" "scale_up" {
+  name                   = "scale-up"
+  scaling_adjustment     = 1
+  adjustment_type        = "ChangeInCapacity"
+  cooldown               = 300
+  autoscaling_group_name = aws_autoscaling_group.web.name
+}
+
+resource "aws_autoscaling_policy" "scale_down" {
+  name                   = "scale-down"
+  scaling_adjustment     = -1
+  adjustment_type        = "ChangeInCapacity"
+  cooldown               = 300
+  autoscaling_group_name = aws_autoscaling_group.web.name
+}
+
+resource "aws_cloudwatch_metric_alarm" "high_cpu" {
+  alarm_name          = "high-cpu-usage"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 2
+  metric_name         = "CPUUtilization"
+  namespace           = "AWS/EC2"
+  period              = 120
+  statistic           = "Average"
+  threshold           = 80
+  
+  dimensions = {
+    AutoScalingGroupName = aws_autoscaling_group.web.name
+  }
+  
+  alarm_description = "Scale up if CPU > 80%"
+  alarm_actions     = [aws_autoscaling_policy.scale_up.arn]
+}
+
+resource "aws_cloudwatch_metric_alarm" "low_cpu" {
+  alarm_name          = "low-cpu-usage"
+  comparison_operator = "LessThanThreshold"
+  evaluation_periods  = 2
+  metric_name         = "CPUUtilization"
+  namespace           = "AWS/EC2"
+  period              = 120
+  statistic           = "Average"
+  threshold           = 20
+  
+  dimensions = {
+    AutoScalingGroupName = aws_autoscaling_group.web.name
+  }
+  
+  alarm_description = "Scale down if CPU < 20%"
+  alarm_actions     = [aws_autoscaling_policy.scale_down.arn]
+}
+```
+
+
+
 
 
 
