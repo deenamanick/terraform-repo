@@ -1,5 +1,5 @@
 data "azurerm_resource_group" "test" {
-  name = "rg_sb_southeastasia_227684_3_174417899718" # Change resourcegroup here
+  name = "rg_sb_southeastasiaxxx" # Change resourcegroup here
 }
 
 # Create virtual network
