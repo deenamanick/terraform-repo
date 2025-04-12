@@ -6,6 +6,6 @@ variable "resource_group_location" {
 
 variable "username" {
   type        = string
-  description = "The username for the local account that will be created on the new VM."
+  description = "The usernam for the local account that will be created on the new VM."
   default     = "azureadmin"
 }
