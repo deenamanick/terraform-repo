@@ -24,5 +24,5 @@ provider "azurerm" {
   #skip_provider_registration = "true"
   # resource_provider_registrations = {}
   resource_provider_registrations = "none"
-  subscription_id                 = "4f6a6eb9-27d0-4ed6-a31c-2bde135e2db6"
+  subscription_id                 = ""
 }
