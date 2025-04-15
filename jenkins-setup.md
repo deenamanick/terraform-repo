@@ -1,4 +1,4 @@
-# Spin up Jenkin server in EC2 
+## Spin up Jenkin server in EC2 
 
 ## datasources.tf
 ```
