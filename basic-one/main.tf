@@ -24,8 +24,9 @@ resource "aws_security_group" "ec2sgnew" {
 }
 
 resource "aws_instance" "ec2instance" {
-  ami = "ami-0c101f26f147fa7fd"
-  #ami             = data.aws_ami.amzlinux.id
+  # ami = "ami-0c101f26f147fa7fd"
+  count           = 3 # <-- This will create 3 instances
+  ami             = data.aws_ami.amzlinux.id
   instance_type   = var.is_dev ? "t3.micro" : "t2.micro"
   security_groups = ["${aws_security_group.ec2sgnew.name}"]
   #subnet_id       = data.aws_subnet.subnet1.id
@@ -33,22 +34,32 @@ resource "aws_instance" "ec2instance" {
   user_data = <<-EOF
 #!/bin/bash  
 echo "Number of tags: ${length(var.instance_tags)}" > /tmp/tag_count.txt
-sudo su -
+sudo amazon-linux-extras enable epel -y
+sudo yum install epel-release -y
 sudo yum -y update
 sudo yum install -y git  # Install Git
+sudo yum install -y sshpass chpasswd
 sudo wget -O /etc/yum.repos.d/jenkins.repo https://pkg.jenkins.io/redhat-stable/jenkins.repo
 sudo rpm --import https://pkg.jenkins.io/redhat-stable/jenkins.io-2023.key
-sudo amazon-linux-extras enable java-openjdk17
+sudo yum update
 sudo yum install java-17-amazon-corretto-devel
-sudo amazon-linux-extras enable java-openjdk17
-sudo yum install java-17-amazon-corretto-devel
-sudo yum upgrade -y
 sudo yum install jenkins -y
-export JAVA_HOME=/usr/lib/jvm/java-17-amazon-corretto.x86_64
-source ~/.bash_profile
+#export JAVA_HOME=/usr/lib/jvm/java-17-amazon-corretto.x86_64
+#source ~/.bash_profile
 java -version
 sudo systemctl start jenkins
 sudo systemctl status jenkins
+sudo yum install -y maven
+sudo sed -i 's/^#PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config
+sudo systemctl restart sshd
+# Create ubuntu user and set password on all nodes
+PASSWORD='ubuntu_password'  # Change this to your desired password
+sudo useradd -m -s /bin/bash ubuntu
+echo "ubuntu:$PASSWORD" | sudo chpasswd
+sudo usermod -aG wheel ubuntu
+echo "ubuntu ALL=(ALL) NOPASSWD:ALL" |  sudo tee /etc/sudoers.d/90-cloud-init-users-ubuntu
+
+
 EOF
 
   #   tags = {             ### {} Interpolation
@@ -58,8 +69,8 @@ EOF
 
   # Use join() to create a comma-separated string of tags
   tags = {
-    Name = "EC2-Instance"
-    Tags = join(", ", var.instance_tags) # Joins the list into a single string Built-in Functions
+    Name = "EC2-Instance-${count.index + 1}" # Different name for each instance
+    Tags = join(", ", var.instance_tags)     # Joins the list into a single string Built-in Functions
   }
 
   # Use substr() to create a truncated instance name
