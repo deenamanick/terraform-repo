@@ -98,7 +98,7 @@ resource "null_resource" "provision_master" {
   depends_on = [vagrant_vm.k8s_vms]
 
   provisioner "local-exec" {
-    command = "vagrant ssh k8s-master -c 'powershell.exe -ExecutionPolicy Bypass -File /vagrant/provision/install-k8s.ps1'"
+    command = "vagrant ssh k8s-master -c 'bash /vagrant/provision/install-k8s.sh'"
   }
 }
 
@@ -106,9 +106,10 @@ resource "null_resource" "provision_worker1" {
   depends_on = [vagrant_vm.k8s_vms]
 
   provisioner "local-exec" {
-    command = "vagrant ssh k8s-worker1 -c 'powershell.exe -ExecutionPolicy Bypass -File /vagrant/provision/install-k8s.ps1'"
+    command = "vagrant ssh k8s-worker1 -c 'bash /vagrant/provision/install-k8s.sh'"
   }
 }
+
 ```
 
 ---
