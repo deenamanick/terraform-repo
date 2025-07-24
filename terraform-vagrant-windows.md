@@ -129,7 +129,7 @@ resource "null_resource" "provision_worker1" {
 
 ```ruby
 Vagrant.configure("2") do |config|
-  config.vm.box = "generic/centos8"
+  config.vm.box = "bento/ubuntu-22.04"
 
   config.vm.define "k8s-master" do |master|
     master.vm.hostname = "k8s-master"
