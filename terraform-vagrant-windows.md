@@ -57,6 +57,17 @@ terraform-vagrant-k8s-lab/
 ```powershell
 Invoke-WebRequest -Uri "https://github.com/bmatcuk/terraform-provider-vagrant/releases/download/v4.1.0/terraform-provider-vagrant_4.1.0_windows_amd64.zip" -OutFile "terraform-provider-vagrant.zip"
 Expand-Archive terraform-provider-vagrant.zip -DestinationPath .
+
+```
+### For linux
+
+```
+wget https://github.com/bmatcuk/terraform-provider-vagrant/releases/download/v0.4.0/terraform-provider-vagrant_0.4.0_linux_amd64.zip
+
+unzip terraform-provider-vagrant_0.4.0_linux_amd64.zip
+mkdir -p ~/.terraform.d/plugins/registry.terraform.io/bmatcuk/vagrant/0.4.0/linux_amd64/
+mv terraform-provider-vagrant ~/.terraform.d/plugins/registry.terraform.io/bmatcuk/vagrant/0.4.0/linux_amd64/terraform-provider-vagrant
+chmod +x ~/.terraform.d/plugins/registry.terraform.io/bmatcuk/vagrant/0.4.0/linux_amd64/terraform-provider-vagrant
 ```
 
 ---
