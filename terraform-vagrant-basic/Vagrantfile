@@ -1,0 +1,10 @@
+# Vagrantfile
+Vagrant.configure("2") do |config|
+  config.vm.define "ubuntu-terraform" do |ubuntu|
+    ubuntu.vm.box = "generic/centos8"
+    ubuntu.vm.network "private_network", ip: "192.168.56.15"
+    ubuntu.vm.synced_folder "./provision", "/home/vagrant/provision"
+    ubuntu.vm.synced_folder "./static-site", "/home/vagrant/static-site"
+  end
+end
+

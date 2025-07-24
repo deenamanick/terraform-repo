@@ -1,0 +1,17 @@
+# Vagrantfile
+Vagrant.configure("2") do |config|
+  config.vm.define "k8s-master" do |master|
+    master.vm.box = "generic/centos8"
+    master.vm.network "private_network", ip: "192.168.56.10"
+    master.vm.synced_folder "./provision", "/home/vagrant/provision"
+  end
+
+  config.vm.define "k8s-worker1" do |worker|
+    worker.vm.box = "generic/centos8"
+    worker.vm.network "private_network", ip: "192.168.56.11"
+    worker.vm.synced_folder "./provision", "/home/vagrant/provision"
+  end
+
+  # Add more nodes as needed
+end
+
