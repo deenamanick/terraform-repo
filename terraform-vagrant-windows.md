@@ -45,7 +45,7 @@ terraform-vagrant-k8s-lab/
 ├── main.tf
 ├── Vagrantfile
 ├── provision/
-│   └── install-k8s.ps1
+│   └── install-k8s.sh
 ```
 
 ---
@@ -145,7 +145,7 @@ end
 
 ---
 
-## ✅ `provision/install-k8s.ps1`
+## ✅ `provision/install-k8s.sh`
 
 This script installs Docker and Kubernetes on Ubuntu VMs:
 
