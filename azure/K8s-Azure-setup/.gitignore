@@ -1,0 +1,4 @@
+.terraform
+manifests
+*.tfstate
+*.tfstate.*
